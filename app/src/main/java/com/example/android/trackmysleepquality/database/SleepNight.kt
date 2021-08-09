@@ -20,7 +20,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-// TODO (01) Create the SleepNight class.
+
 
 @Entity(tableName = "daily_sleep_quality_table")
  data class SleepNight(

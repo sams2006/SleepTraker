@@ -17,9 +17,16 @@
 package com.example.android.trackmysleepquality.sleeptracker
 
 import android.app.Application
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.AndroidViewModel
+import android.provider.SyncStateContract.Helpers.insert
+import android.provider.SyncStateContract.Helpers.update
+import androidx.lifecycle.*
 import com.example.android.trackmysleepquality.database.SleepDatabaseDao
+import com.example.android.trackmysleepquality.database.SleepNight
+import com.example.android.trackmysleepquality.formatNights
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * ViewModel for SleepTrackerFragment.
@@ -27,5 +34,94 @@ import com.example.android.trackmysleepquality.database.SleepDatabaseDao
 class SleepTrackerViewModel(
         val database: SleepDatabaseDao,
         application: Application) : AndroidViewModel(application) {
+
+  private val tonight = MutableLiveData<SleepNight?>()
+  private val nights =  database.getAllNights()
+
+    val nightsString = Transformations.map(nights) { nights ->
+        formatNights(nights, application.resources)
+    }
+
+    val startButtonVisible = Transformations.map(tonight) {
+        it == null
+    }
+
+    val stopButtonVisible = Transformations.map(tonight) {
+        it != null
+    }
+
+    val clearButtonVisible = Transformations.map(nights) {
+        it?.isNotEmpty()
+    }
+
+    private val _navigateToSleepQuality = MutableLiveData<SleepNight>()
+    val navigateToSleepQuality: LiveData<SleepNight>
+        get() = _navigateToSleepQuality
+
+    fun doneNavigating() {
+        _navigateToSleepQuality.value = null
+    }
+
+    private var _showSnackBarEvent = MutableLiveData<Boolean>()
+    val showSnackBarEvent: LiveData<Boolean>
+        get() = _showSnackBarEvent
+
+    fun doneShowingSnackBar() {
+        _showSnackBarEvent.value = false
+    }
+
+
+
+        init {
+            initializeTonight()
+        }
+
+        private fun initializeTonight() {
+
+               viewModelScope.launch {
+                       tonight.value = getTonightFromDataBase()
+               }
+        }
+
+     private suspend fun getTonightFromDataBase(): SleepNight? {
+
+             var night = database.getTonight()
+             if (night?.endTimeMilli != night?.startTimeMilli) {
+                     night = null
+             }
+             return night
+        }
+
+         fun onStartTracking() {
+               viewModelScope.launch {
+                       val newNight = SleepNight()
+                       database.insert(newNight)
+                       tonight.value = getTonightFromDataBase()
+               }
+
+        }
+
+
+
+    fun onStopTracking(){
+        viewModelScope.launch {
+            val oldNight = tonight.value ?: return@launch
+            oldNight.endTimeMilli = System.currentTimeMillis()
+            database.update(oldNight)
+            _navigateToSleepQuality.value = oldNight
+        }
+    }
+
+
+
+    fun onClear() {
+        viewModelScope.launch {
+            database.clear()
+            tonight.value = null
+            _showSnackBarEvent.value = true
+        }
+    }
+
+
 }
 
